@@ -13,12 +13,11 @@ def string_to_one_hot(inputs: np.ndarray) -> jnp.ndarray:
 
     Parameters:
     -----------
-    inputs: np.ndarray of chars to be converted
+    inputs: np.ndarray - Chars to be converted
 
     Returns:
     --------
-    jnp.ndarray
-        A JAX ndarray of the one-hot encoded string
+    jnp.ndarray - A JAX ndarray of the one-hot encoded string
     """
 
 
@@ -283,6 +282,7 @@ if __name__ == "__main__":
     loss, model = loss_and_model
 
     print(gradients)
+
         
 
 
