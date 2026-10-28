@@ -7,6 +7,21 @@ import numpy as np
 
 
 def string_to_one_hot(inputs: np.ndarray) -> jnp.ndarray:
+    """
+    Converts an array of char to a one-hot encoded array.
+    Pulled from: https://medium.com/@thisislong/building-a-recurrent-neural-network-from-scratch-ba9b27a42856
+
+    Parameters:
+    -----------
+    inputs: np.ndarray of chars to be converted
+
+    Returns:
+    --------
+    jnp.ndarray
+        A JAX ndarray of the one-hot encoded string
+    """
+
+
     char_to_index = {char: i for i, char in enumerate(string.ascii_uppercase)}
 
     one_hot_inputs = []
@@ -22,6 +37,12 @@ def string_to_one_hot(inputs: np.ndarray) -> jnp.ndarray:
     return jnp.array(one_hot_inputs)
 
 def load_data():
+    """
+    Defines inputs and expected datasets
+
+    TODO: Add load for datasets
+    """
+
     inputs = np.array([
         ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"],
         ["Z","Y","X","W","V","U","T","S","R","Q","P","O","N","M","L","K","J","I","H","G","F","E","D","C","B","A"],
@@ -45,6 +66,20 @@ def initialize_config(sequence_size,
                       hidden_size=128,
                       vocab_size = len(string.ascii_uppercase),
                       alpha=0.001):
+    """Initializes config pytree for the model
+
+    Parameters:
+    -----------
+    sequence_size: int - length of the data chunck
+    seed: int - seed for random number generator
+    hidden_size: int - size of the hidden layer
+    vocab_size: int - size of vocab - length of array for a single char
+    alpha: float - learning rate
+
+    Returns:
+    --------
+    PyTree - config metadata organized as a pytree
+    """
 
     config = {
         'seed': seed,
@@ -57,6 +92,7 @@ def initialize_config(sequence_size,
 
     return config
 
+#TODO: Create a general layer constructor 
 def initialize_hidden_layer(config):
 
     config['key'], key_W, key_hb = jax.random.split(config['key'], 3)
@@ -108,6 +144,17 @@ def initialize_input_layer(config, inputs):
     return input_layer, config
 
 def construct_model_pytree(config):
+    """Builds layers of RNN from config and organizes the initialized model into a single pytree
+
+    Parameters:
+    -----------
+    config: PyTree - config metadata used to build model
+
+    Returns:
+    --------
+    model: PyTree - initialized model organized into a single pytree
+    """
+
     hidden_layer, config = initialize_hidden_layer(config)
     output_layer, config = initialize_output_layer(config)
     input_layer, config = initialize_input_layer(config, one_hot_inputs[0])
@@ -123,6 +170,16 @@ def construct_model_pytree(config):
 
 @jax.jit
 def feed_forward(model):
+      """Runs a feed forward pass of the model
+
+      Parameters:
+      -----------
+      model: PyTree - Contains layers and metadata for the model
+
+      Returns:
+      --------
+      all_states: PyTree - hidden states and output states for the entire feed forward pass
+      """
 
       #Feed forward implementation for a single input
       def feed_forward_step(carry, input):
@@ -159,15 +216,40 @@ def feed_forward(model):
 
 @jax.jit
 def loss_fn(predictions, expected):
+    """Cross-Entropy Loss Function: computes the cross entropy loss for each time step and sums over all time steps.
 
+    Parameters:
+    -----------
+    predictions: jnp.ndarray - model output states
+    expected: jnp.ndarray - one-hot encoded expected output
+
+    Returns:
+    --------
+    loss: float - computed summed cross-entropy loss
+    """
+
+    #Compute cross entropy loss for a single time step
     @jax.jit
     def loss_t_step(prediction, expected):
         return -jnp.sum(expected * jnp.log(prediction))
     
+    #Sum over cross-entropy loss at all time steps
     return jnp.sum(jax.vmap(loss_t_step, in_axes=(0, 0))(predictions, expected))
 
 @jax.jit
 def compute_rnn_loss(model, expected):
+    """Runs a feed forward pass of the model and computes the loss
+
+    Parameters:
+    -----------
+    model: PyTree - Model parameters and metadata
+    expected: jnp.ndarray - One-hot encoded expected outputs
+
+    Returns:
+    --------
+    loss: float - computed cross-entropy loss from model output states and expected
+    model: PyTree - Model Parameters and metadata after feed forward pass
+    """
     
     #Run feedforward pass
     all_states = feed_forward(model)
