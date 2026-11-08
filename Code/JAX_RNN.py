@@ -35,13 +35,7 @@ def string_to_one_hot(inputs: np.ndarray) -> jnp.ndarray:
 
     return jnp.array(one_hot_inputs)
 
-def load_data():
-    """
-    Defines inputs and expected datasets
-
-    TODO: Add load for datasets
-    """
-
+def get_default_data():
     inputs = np.array([
         ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"],
         ["Z","Y","X","W","V","U","T","S","R","Q","P","O","N","M","L","K","J","I","H","G","F","E","D","C","B","A"],
@@ -59,6 +53,26 @@ def load_data():
     ])
 
     return inputs, expected
+
+def load_data(file_name=None):
+    """
+    Defines inputs and expected datasets
+
+    TODO: Add load for datasets
+    """
+
+    if file_name == None:
+        return get_default_data()
+
+    #Shakespeare: 85 unique chars
+    with open(file_name, "r", encoding="utf-8") as file:
+        lines = file.readlines()
+
+        
+
+    
+
+    
 
 def initialize_config(sequence_size,
                       seed=1701, 
