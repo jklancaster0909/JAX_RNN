@@ -2,9 +2,11 @@ import jax
 import string
 import jax.numpy as jnp
 import jax.lax as lax
-from jaxtyping import PyTree
+import jax.tree_util as jtu
+from jaxtyping import PyTree, PRNGKeyArray
 
 import numpy as np
+import yaml
 
 
 def load_text(file_name=None):
@@ -53,7 +55,7 @@ def get_max_line(raw_text: list) -> int:
 
     return max
 
-def update_chars_dict(line: list, chars: dict, char_idx: int):
+def update_chars_dict(line: list, chars: dict, chars_rev: dict, char_idx: int):
     """
     Update chars dictionary for a line of text
 
@@ -61,22 +63,28 @@ def update_chars_dict(line: list, chars: dict, char_idx: int):
     -----------
     line: list - list of chars representing a line of text
     chars: dict - all chars in dataset with assigned index 'idx' and count value 'count'
+    chars_rev: dict - all chars in dataset with idx as key and values 'char' and 'count'
     char_idx: int - index of the next char added to chars
     """
 
     for char in line:
         if char in chars:
             chars[char]['count'] += 1
+            chars_rev[chars[char]['idx']]['count'] += 1
         else:
             chars[char] = {
                 'idx': char_idx,
+                'count': 1
+            }
+            chars_rev[char_idx] = {
+                'char': char,
                 'count': 1
             }
             char_idx += 1
     
 
 
-def process_text(raw_text, max):
+def process_text(raw_text: list, max: int) -> tuple[dict, dict]:
     """
     Adds spaces to the end of each line to equal max length.
     Converts each line to a list of chars.
@@ -90,19 +98,21 @@ def process_text(raw_text, max):
     Returns:
     --------
     dict - all chars in dataset with assigned index 'idx' and count value 'count'
+    dict -  all chars in dataset with idx as key and values 'char' and 'count'
     """
 
     chars = {}
+    chars_rev = {}
     char_idx = 0
     for i in range(len(raw_text)):
         raw_text[i] = list(raw_text[i] + ' ' * (max - len(raw_text[i])))
-        update_chars_dict(raw_text[i], chars, char_idx)
+        update_chars_dict(raw_text[i], chars, chars_rev, char_idx)
 
     print('chars dictionary created')
     print(f'max length: {max}')
     print(f'vocab size: {len(chars)}\n')
         
-    return chars
+    return chars, chars_rev
 
 def chars_to_one_hot(inputs: np.ndarray, chars_dict: dict) -> jnp.ndarray:
     """
@@ -134,7 +144,7 @@ def chars_to_one_hot(inputs: np.ndarray, chars_dict: dict) -> jnp.ndarray:
 
     print('\nInputs one hot encoded')
     one_hot_inputs = jnp.array(one_hot_inputs)
-    print(f'Dataset shaope: {one_hot_inputs.shape}\n')
+    print(f'Dataset shape: {one_hot_inputs.shape}\n')
 
     return one_hot_inputs
 
@@ -209,10 +219,10 @@ def load_data(file_name=None):
     if file_name == None:
         return get_default_data()
 
-    raw_text = load_text(file_name)
+    raw_text = load_text(file_name)[:100]
 
     max = get_max_line(raw_text)
-    chars_dict = process_text(raw_text, max)
+    chars_dict, chars_rev = process_text(raw_text, max)
 
     one_hot_inputs = chars_to_one_hot(raw_text, chars_dict)
 
@@ -223,7 +233,7 @@ def load_data(file_name=None):
     print(f'Inputs shape: {inputs.shape}')
     print(f'Expected Shape{expected.shape}\n')
 
-    return inputs, expected
+    return inputs, expected, chars_rev
 
 
 
@@ -436,25 +446,105 @@ def compute_rnn_loss(model: PyTree, expected: jnp.ndarray) -> tuple[float, PyTre
 
     return loss, model
 
+
+
+def learning_loop(model, inputs, expected):
+
+    learning_rate = model['config']['alpha']
+
+    def apply_gradient_step(param_leaf, grad_leaf):
+        if isinstance(param_leaf, (jnp.ndarray, jax.Array)) and isinstance(grad_leaf, (jnp.ndarray, jax.Array)):
+            return param_leaf - learning_rate * grad_leaf
+        else:
+            return param_leaf
+        
+    num_iter = 50 #len(inputs)
+        
+    for i in range(num_iter):
+
+        #update inputs
+        model['input_layer']['inputs'] = inputs[i]
+
+        #Define value and gradient function
+        loss_grad_fn = jax.jit(jax.value_and_grad(compute_rnn_loss, has_aux=True, allow_int=True))
+
+        #Run forward pass and compute gradients
+        loss_and_model, gradients = loss_grad_fn(model, expected[i])
+        loss, model = loss_and_model
+
+        model = jtu.tree_map(apply_gradient_step, model, gradients)
+
+        if i % 10 == 0:
+            print(f'Loss at iter {i}: {loss}')
+
+    return model, i
+
+def decode_one_hot(data: jnp.ndarray, chars_rev: dict) -> string:
+
+    decoded_data = ''
+
+    for row in data:
+        char = chars_rev[int(jnp.argmax(row))]['char']
+        decoded_data += char
+
+    return decoded_data
+
+# 2. Convert JAX Arrays to standard Python types (lists/scalars)
+def to_python_types(leaf):
+    if isinstance(leaf, (jax.dtypes.prng_key, PRNGKeyArray)):
+        return jax.random.key_data(leaf).tolist()
+    elif isinstance(leaf, (jax.Array, jnp.ndarray)):
+        # Convert to a standard Python scalar or list
+        return leaf.tolist()
+    return leaf
+
+
+
+
 if __name__ == "__main__":
 
     #Load data
     path = 'Datasets/shakespeare.txt'
-    inputs, expected = load_data(path)
+    inputs, expected, chars_rev = load_data(path)
+
 
     #Construct initial model pytree
     config = initialize_config(sequence_size=jnp.size(inputs, 1), vocab_size=jnp.size(inputs, 2))
-    model = construct_model_pytree(config, inputs=inputs[4])
+    print(config['key'].dtype)
+    model = construct_model_pytree(config, inputs=inputs[0])
+
+    trained_model, final_idx = learning_loop(model, inputs, expected)
+
+    trained_model['config']['key'] = jax.random.key_data(trained_model['config']['key']).tolist()
+
+    trained_model_dict = jtu.tree_map(to_python_types, trained_model)
+
+    with open('data.yml', "w", encoding="utf-8") as outfile:
+        yaml.dump(trained_model_dict, outfile, default_flow_style=False)
+
+    decoded_output = decode_one_hot(trained_model['output_layer']['o_states'], chars_rev)
+    decoded_expected = decode_one_hot(expected[final_idx], chars_rev)
+
+    print(decoded_output)
+    print(decoded_expected)
+
+    print(trained_model_dict)
+
+    """
+
+    idx = 4
 
     #Define value and gradient function
     loss_grad_fn = jax.jit(jax.value_and_grad(compute_rnn_loss, has_aux=True, allow_int=True))
 
     #Run forward pass and compute gradients
-    loss_and_model, gradients = loss_grad_fn(model, expected[0])
+    loss_and_model, gradients = loss_grad_fn(model, expected[idx])
     loss, model = loss_and_model
+    """
 
 
-    print(gradients)
+
+    #print(gradients)
 
         
 
