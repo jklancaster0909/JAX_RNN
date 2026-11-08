@@ -2,9 +2,141 @@ import jax
 import string
 import jax.numpy as jnp
 import jax.lax as lax
+from jaxtyping import PyTree
 
 import numpy as np
 
+
+def load_text(file_name=None):
+    """
+    Loads a text dataset as a list of strings
+
+
+
+    """
+
+    #Shakespeare: 85 unique chars
+    with open(file_name, "r", encoding="utf-8") as file:
+        raw_text = file.readlines()
+
+    print('text loaded\n')
+    
+    return raw_text
+
+def get_max_line(raw_text: list) -> int:
+    """
+    Returns the length of the longest line in the raw text dataset
+
+    Parameters:
+    -----------
+    raw_text: list - list of strings
+
+    Returns:
+    --------
+    int - length of the longest string
+
+    """
+
+    raw_text[0] = raw_text[0][1:]
+
+    max=0
+    for i in range(len(raw_text)):
+
+        #Remove \n from the end of each line
+        if raw_text[i][-1] == '\n':
+            raw_text[i] = raw_text[i][:-1]
+
+        #Update max length
+        length = len(raw_text[i])
+        if length > max:
+            max = length
+
+    return max
+
+def update_chars_dict(line: list, chars: dict, char_idx: int):
+    """
+    Update chars dictionary for a line of text
+
+    Parameters:
+    -----------
+    line: list - list of chars representing a line of text
+    chars: dict - all chars in dataset with assigned index 'idx' and count value 'count'
+    char_idx: int - index of the next char added to chars
+    """
+
+    for char in line:
+        if char in chars:
+            chars[char]['count'] += 1
+        else:
+            chars[char] = {
+                'idx': char_idx,
+                'count': 1
+            }
+            char_idx += 1
+    
+
+
+def process_text(raw_text, max):
+    """
+    Adds spaces to the end of each line to equal max length.
+    Converts each line to a list of chars.
+    Creates a dictionary with an assigned index and count value for each char.
+
+    Parameters:
+    -----------
+    raw_text: list - list of strings
+    max: int - length of the longest string
+
+    Returns:
+    --------
+    dict - all chars in dataset with assigned index 'idx' and count value 'count'
+    """
+
+    chars = {}
+    char_idx = 0
+    for i in range(len(raw_text)):
+        raw_text[i] = list(raw_text[i] + ' ' * (max - len(raw_text[i])))
+        update_chars_dict(raw_text[i], chars, char_idx)
+
+    print('chars dictionary created')
+    print(f'max length: {max}')
+    print(f'vocab size: {len(chars)}\n')
+        
+    return chars
+
+def chars_to_one_hot(inputs: np.ndarray, chars_dict: dict) -> jnp.ndarray:
+    """
+    Converts an array of char to a one-hot encoded array.
+
+    Parameters:
+    -----------
+    inputs: np.ndarray - Chars to be converted
+    chars_dict: dict - dictionary of chars in dataset with indices 'idx'
+
+    Returns:
+    --------
+    jnp.ndarray - A JAX ndarray of the one-hot encoded chars datset
+    """
+
+    length = len(inputs)
+    seq_size = len(inputs[0])
+    vocab_size = len(chars_dict)
+
+
+
+    one_hot_inputs = np.zeros((length, seq_size, vocab_size))
+    for i, row in enumerate(inputs):
+        if i % 10000 == 0:
+            print(f'{i} rows encoded...')
+
+        for j, char in enumerate(row):
+            one_hot_inputs[i, j, chars_dict[char]['idx']] = 1
+
+    print('\nInputs one hot encoded')
+    one_hot_inputs = jnp.array(one_hot_inputs)
+    print(f'Dataset shaope: {one_hot_inputs.shape}\n')
+
+    return one_hot_inputs
 
 def string_to_one_hot(inputs: np.ndarray) -> jnp.ndarray:
     """
@@ -52,7 +184,20 @@ def get_default_data():
         ["I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","A","B","C","D","E","F","G","H"]
     ])
 
-    return inputs, expected
+    #One hot encode data
+    one_hot_inputs = string_to_one_hot(inputs)
+    one_hot_expected = string_to_one_hot(expected)
+
+    return one_hot_inputs, one_hot_expected
+
+@jax.jit
+def get_expected(input: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+
+    seq_size=jnp.size(input, axis=0)
+
+    new_input = lax.dynamic_slice_in_dim(input, 0, seq_size-1, axis=0)
+    expected = lax.dynamic_slice_in_dim(input, 1, seq_size-1, axis=0)
+    return new_input, expected
 
 def load_data(file_name=None):
     """
@@ -64,9 +209,25 @@ def load_data(file_name=None):
     if file_name == None:
         return get_default_data()
 
-    #Shakespeare: 85 unique chars
-    with open(file_name, "r", encoding="utf-8") as file:
-        lines = file.readlines()
+    raw_text = load_text(file_name)
+
+    max = get_max_line(raw_text)
+    chars_dict = process_text(raw_text, max)
+
+    one_hot_inputs = chars_to_one_hot(raw_text, chars_dict)
+
+    vmap_get_expected = jax.jit(jax.vmap(get_expected, in_axes=0, out_axes=(0,0)))
+    inputs, expected = vmap_get_expected(one_hot_inputs)
+
+    print('Expected outputs created')
+    print(f'Inputs shape: {inputs.shape}')
+    print(f'Expected Shape{expected.shape}\n')
+
+    return inputs, expected
+
+
+
+
 
         
 
@@ -156,7 +317,7 @@ def initialize_input_layer(config, inputs):
 
     return input_layer, config
 
-def construct_model_pytree(config):
+def construct_model_pytree(config: PyTree, inputs: jnp.ndarray) -> dict:
     """Builds layers of RNN from config and organizes the initialized model into a single pytree
 
     Parameters:
@@ -170,7 +331,7 @@ def construct_model_pytree(config):
 
     hidden_layer, config = initialize_hidden_layer(config)
     output_layer, config = initialize_output_layer(config)
-    input_layer, config = initialize_input_layer(config, one_hot_inputs[0])
+    input_layer, config = initialize_input_layer(config, inputs)
 
     model = {
         'input_layer': input_layer,
@@ -182,7 +343,7 @@ def construct_model_pytree(config):
     return model
 
 @jax.jit
-def feed_forward(model):
+def feed_forward(model: PyTree) -> tuple[jnp.ndarray, jnp.ndarray]:
       """Runs a feed forward pass of the model
 
       Parameters:
@@ -228,7 +389,7 @@ def feed_forward(model):
       return all_states
 
 @jax.jit
-def loss_fn(predictions, expected):
+def loss_fn(predictions: jnp.ndarray, expected: jnp.ndarray) -> float:
     """Cross-Entropy Loss Function: computes the cross entropy loss for each time step and sums over all time steps.
 
     Parameters:
@@ -250,7 +411,7 @@ def loss_fn(predictions, expected):
     return jnp.sum(jax.vmap(loss_t_step, in_axes=(0, 0))(predictions, expected))
 
 @jax.jit
-def compute_rnn_loss(model, expected):
+def compute_rnn_loss(model: PyTree, expected: jnp.ndarray) -> tuple[float, PyTree]:
     """Runs a feed forward pass of the model and computes the loss
 
     Parameters:
@@ -278,22 +439,20 @@ def compute_rnn_loss(model, expected):
 if __name__ == "__main__":
 
     #Load data
-    inputs, expected = load_data()
-
-    #One hot encode data
-    one_hot_inputs = string_to_one_hot(inputs)
-    one_hot_expected = string_to_one_hot(expected)
+    path = 'Datasets/shakespeare.txt'
+    inputs, expected = load_data(path)
 
     #Construct initial model pytree
-    config = initialize_config(sequence_size=len(one_hot_inputs[0]))
-    model = construct_model_pytree(config)
+    config = initialize_config(sequence_size=jnp.size(inputs, 1), vocab_size=jnp.size(inputs, 2))
+    model = construct_model_pytree(config, inputs=inputs[4])
 
     #Define value and gradient function
     loss_grad_fn = jax.jit(jax.value_and_grad(compute_rnn_loss, has_aux=True, allow_int=True))
 
     #Run forward pass and compute gradients
-    loss_and_model, gradients = loss_grad_fn(model, one_hot_expected[0])
+    loss_and_model, gradients = loss_grad_fn(model, expected[0])
     loss, model = loss_and_model
+
 
     print(gradients)
 
