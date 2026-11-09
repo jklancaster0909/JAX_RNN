@@ -9,12 +9,17 @@ import numpy as np
 import yaml
 
 
-def load_text(file_name=None):
+def load_text(file_name: string):
     """
     Loads a text dataset as a list of strings
 
+    Parameters:
+    -----------
+    file_name: string - path to the file
 
-
+    Returns:
+    --------
+    list - list of strings representing lines of text
     """
 
     #Shakespeare: 85 unique chars
@@ -36,7 +41,6 @@ def get_max_line(raw_text: list) -> int:
     Returns:
     --------
     int - length of the longest string
-
     """
 
     raw_text[0] = raw_text[0][1:]
@@ -449,10 +453,28 @@ def compute_rnn_loss(model: PyTree, expected: jnp.ndarray) -> tuple[float, PyTre
 
 
 def learning_loop(model, inputs, expected):
+    """
+    TODO: Proper implementation of this
+    """
 
     learning_rate = model['config']['alpha']
 
     def apply_gradient_step(param_leaf, grad_leaf):
+        """
+        Applies the gradient step for a leaf of the model PyTree
+
+        Parameters:
+        -----------
+        paramleaf: leaf of the model PyTree
+        gradleaf: leaf of thr gradient PyTree
+
+        returns:
+        --------
+        new leaf with gradient applies
+
+        """
+
+
         if isinstance(param_leaf, (jnp.ndarray, jax.Array)) and isinstance(grad_leaf, (jnp.ndarray, jax.Array)):
             return param_leaf - learning_rate * grad_leaf
         else:
@@ -480,6 +502,18 @@ def learning_loop(model, inputs, expected):
     return model, i
 
 def decode_one_hot(data: jnp.ndarray, chars_rev: dict) -> string:
+    """
+    Decode one hot encoded data into a string
+
+    Parameters:
+    -----------
+    data: jnp.ndarray - 2d array of data of shape (seq_size, vocab_size)
+    chars_rev: dict - all chars in dataset with idx as key and values 'char' and 'count'
+
+    Returns:
+    --------
+    string - data decoded into string
+    """
 
     decoded_data = ''
 
@@ -491,6 +525,18 @@ def decode_one_hot(data: jnp.ndarray, chars_rev: dict) -> string:
 
 # 2. Convert JAX Arrays to standard Python types (lists/scalars)
 def to_python_types(leaf):
+    """
+    Convert a leaf of a PyTree to a standard Python type for printing
+
+    Parameters:
+    -----------
+    leaf: leaf of a pytree, any data type
+
+    Returns:
+    --------
+    list - jax array converted to list, or original leaf
+    """
+
     if isinstance(leaf, (jax.dtypes.prng_key, PRNGKeyArray)):
         return jax.random.key_data(leaf).tolist()
     elif isinstance(leaf, (jax.Array, jnp.ndarray)):
