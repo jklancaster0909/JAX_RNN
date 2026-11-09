@@ -69,12 +69,17 @@ def update_chars_dict(line: list, chars: dict, chars_rev: dict, char_idx: int):
     chars: dict - all chars in dataset with assigned index 'idx' and count value 'count'
     chars_rev: dict - all chars in dataset with idx as key and values 'char' and 'count'
     char_idx: int - index of the next char added to chars
+
+    Returns:
+    --------
+    char_idx: int - index of the next char added to chars
     """
 
     for char in line:
         if char in chars:
             chars[char]['count'] += 1
             chars_rev[chars[char]['idx']]['count'] += 1
+            pass
         else:
             chars[char] = {
                 'idx': char_idx,
@@ -85,6 +90,8 @@ def update_chars_dict(line: list, chars: dict, chars_rev: dict, char_idx: int):
                 'count': 1
             }
             char_idx += 1
+    
+    return char_idx
     
 
 
@@ -110,7 +117,7 @@ def process_text(raw_text: list, max: int) -> tuple[dict, dict]:
     char_idx = 0
     for i in range(len(raw_text)):
         raw_text[i] = list(raw_text[i] + ' ' * (max - len(raw_text[i])))
-        update_chars_dict(raw_text[i], chars, chars_rev, char_idx)
+        char_idx = update_chars_dict(raw_text[i], chars, chars_rev, char_idx)
 
     print('chars dictionary created')
     print(f'max length: {max}')
@@ -572,9 +579,9 @@ if __name__ == "__main__":
     decoded_expected = decode_one_hot(expected[final_idx], chars_rev)
 
     print(decoded_output)
-    print(decoded_expected)
+    print('.'+decoded_expected)
 
-    print(trained_model_dict)
+    #print(trained_model_dict)
 
     """
 
