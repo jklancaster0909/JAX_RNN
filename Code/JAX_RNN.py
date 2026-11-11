@@ -15,7 +15,7 @@ def initialize_config(sequence_size,
                       seed=1701, 
                       hidden_size=128,
                       vocab_size = len(string.ascii_uppercase),
-                      alpha=0.001):
+                      alpha=0.01):
     """Initializes config pytree for the model
 
     Parameters:
