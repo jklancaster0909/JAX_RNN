@@ -78,10 +78,10 @@ class OutputLayer(StateLayer):
 
 class InputLayer(Layer):
 
-    def __init__(self, config, inputs):
+    def __init__(self, config):
         config.key, key_W = jax.random.split(config.key, 2)
         super().__init__(config.key, key_W, (config.hidden_size, config.input_size))
-        self.inputs = inputs
+        self.inputs = config.inputs
 
     def get_pytree(self):
         tree = super().get_pytree()

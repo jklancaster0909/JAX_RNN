@@ -5,18 +5,23 @@ import jax.lax as lax
 import jax.tree_util as jtu
 from jaxtyping import PyTree, PRNGKeyArray
 
+
 import numpy as np
 import yaml
+
+from RNN_Layers import HiddenLayer, OutputLayer, InputLayer
 
 class ModelParams:
 
     def __init__(self,
+                 inputs,
                  sequence_size,
                  vocab_size = len(string.ascii_uppercase),
                  seed=1701, 
                  hidden_size=128,
                  alpha=0.01):
         
+        self.inputs = inputs
         self.sequence_size = sequence_size
         self.seed = seed
         self.key = jax.random.key(self.seed)
@@ -24,7 +29,13 @@ class ModelParams:
         self.vocab_size = vocab_size
         self.alpha = alpha
 
-        self.config = {
+        self.hidden_layer = HiddenLayer(self)
+        self.output_layer = OutputLayer(self)
+        self.input_layer = InputLayer(self)
+
+
+    def get_config(self):
+        config = {
             'seed': self.seed,
             'key': self.key,
             'vocab_size': self.vocab_size,
@@ -33,20 +44,6 @@ class ModelParams:
             'alpha': self.alpha,
         }
 
-        self.params = {
-            'config': self.config
-        }
-
-
-
-    """
-    TODO:
-    def set_hidden_layer(layer: Layer):
-        hidden_layer = {
-            'W': layer.W,
-            'h_bias': h_bias,
-            'h_states': h_states
-        }
-     """
+        return config
 
 
