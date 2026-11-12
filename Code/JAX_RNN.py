@@ -9,8 +9,7 @@ import numpy as np
 import yaml
 
 from RNN_Text_Utils import *
-from ModelParams import ModelParams
-from RNN_Layers import InputLayer, HiddenLayer, OutputLayer
+
 
 
 def initialize_config(sequence_size,
@@ -189,13 +188,12 @@ def loss_fn(predictions: jnp.ndarray, expected: jnp.ndarray) -> float:
     return jnp.sum(jax.vmap(loss_t_step, in_axes=(0, 0))(predictions, expected))
 
 @jax.jit
-def compute_rnn_loss(model: PyTree, expected: jnp.ndarray) -> tuple[float, PyTree]:
+def compute_rnn_loss(model: PyTree) -> tuple[float, PyTree]:
     """Runs a feed forward pass of the model and computes the loss
 
     Parameters:
     -----------
     model: PyTree - Model parameters and metadata
-    expected: jnp.ndarray - One-hot encoded expected outputs
 
     Returns:
     --------
@@ -210,7 +208,7 @@ def compute_rnn_loss(model: PyTree, expected: jnp.ndarray) -> tuple[float, PyTre
     model['hidden_layer']['states'], model['output_layer']['states'] = all_states
 
     #Compute loss
-    loss = loss_fn(model['output_layer']['states'], expected)
+    loss = loss_fn(model['output_layer']['states'], model['output_layer']['expected'])
 
     return loss, model
 
@@ -319,7 +317,7 @@ def to_python_types(leaf):
 
 
 
-
+"""
 if __name__ == "__main__":
 
     #Load data
@@ -333,14 +331,15 @@ if __name__ == "__main__":
     #config = initialize_config(sequence_size=jnp.size(inputs, 1), vocab_size=jnp.size(inputs, 2)
     #model = construct_model_pytree(config, inputs=inputs[0])
 
-    model = ModelParams(inputs=inputs[0], sequence_size=jnp.size(inputs, 1), vocab_size=jnp.size(inputs, 2))
-    model_tree = model.get_pytree()
+    model = ModelParams(inputs=inputs[0], expected=expected[0])
+    #model_tree = model.get_pytree()
 
     #print(model.hidden_layer.states)
     #print(model_tree['hidden_layer']['states'])
 
 
-    trained_model, final_idx = learning_loop(model_tree, inputs, expected)
+    #trained_model, final_idx = learning_loop(model_tree, inputs, expected)
+    trained_model, final_idx = model.learning_loop()
 
     #trained_model['config']['key'] = jax.random.key_data(trained_model['config']['key']).tolist()
 
@@ -363,7 +362,9 @@ if __name__ == "__main__":
 
     #print(trained_model_dict)
 
-    """
+"""
+
+"""
 
     idx = 4
 
@@ -373,7 +374,7 @@ if __name__ == "__main__":
     #Run forward pass and compute gradients
     loss_and_model, gradients = loss_grad_fn(model, expected[idx])
     loss, model = loss_and_model
-    """
+"""
 
 
 
