@@ -215,7 +215,9 @@ def get_default_data():
     one_hot_inputs = string_to_one_hot(inputs)
     one_hot_expected = string_to_one_hot(expected)
 
-    return one_hot_inputs, one_hot_expected
+    index_to_char = {i: char for i, char in enumerate(string.ascii_uppercase)}
+
+    return one_hot_inputs, one_hot_expected, index_to_char
 
 
 @jax.jit

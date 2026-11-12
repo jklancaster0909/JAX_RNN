@@ -19,17 +19,30 @@ class Layer:
         self.shape = shape
         self.W = jax.random.uniform(key=self.key_W, shape=self.shape)
 
-    def get_pytree(self):
-        tree = {
-            'key': self.key,
-            'key_W': self.key_W,
-            'shape': self.shape,
-            'W': self.W
-        }
+    def get_pytree(self, python_type: bool = False):
+        
+        if python_type:
+            tree = {
+                'key': jax.random.key_data(self.key).tolist(),
+                'key_W': jax.random.key_data(self.key_W).tolist(),
+                'W': self.W.tolist()
+            }
+        else:
+            tree = {
+                'key': self.key,
+                'key_W': self.key_W,
+                'W': self.W
+            }
+
+        tree['shape'] = self.shape
+
+        
         return tree
     
     def get_params(self):
         return {'W': self.W}
+    
+
     
     def update_params(self, tree: PyTree):
         self.W = tree['W']
@@ -45,11 +58,19 @@ class StateLayer(Layer):
         self.bias = jax.random.uniform(key=self.key_b, shape=(shape[0]))
         self.states = jnp.zeros(shape=(config.sequence_size, shape[0]))
 
-    def get_pytree(self):
-        tree = super().get_pytree()
-        tree['key_b'] = self.key_b
-        tree['bias'] = self.bias
-        tree['states'] = self.states
+    def get_pytree(self, python_type: bool = False):
+        tree = super().get_pytree(python_type=python_type)
+
+        if python_type:
+            tree['key_b'] = jax.random.key_data(self.key_b).tolist()
+            tree['bias'] = self.bias.tolist()
+            tree['states'] = self.states.tolist()
+        else:
+            tree['key_b'] = self.key_b
+            tree['bias'] = self.bias
+            tree['states'] = self.states
+
+        return tree
 
     def get_params(self):
         tree = super().get_params()
@@ -80,12 +101,16 @@ class InputLayer(Layer):
 
     def __init__(self, config):
         config.key, key_W = jax.random.split(config.key, 2)
-        super().__init__(config.key, key_W, (config.hidden_size, config.input_size))
+        super().__init__(config.key, key_W, (config.hidden_size, config.vocab_size))
         self.inputs = config.inputs
 
-    def get_pytree(self):
-        tree = super().get_pytree()
-        tree['inputs'] = self.inputs
+    def get_pytree(self, python_type: bool = False):
+        tree = super().get_pytree(python_type=python_type)
+
+        if python_type:
+            tree['inputs'] = self.inputs.tolist()
+        else:
+            tree['inputs'] = self.inputs
         return tree
     
     def get_params(self):
@@ -96,6 +121,8 @@ class InputLayer(Layer):
     def update_params(self, tree):
         super().update_params(tree)
         self.inputs = tree['inputs']
+
+    
 
 
 

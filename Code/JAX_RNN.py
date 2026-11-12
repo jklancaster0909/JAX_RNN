@@ -9,6 +9,8 @@ import numpy as np
 import yaml
 
 from RNN_Text_Utils import *
+from ModelParams import ModelParams
+from RNN_Layers import InputLayer, HiddenLayer, OutputLayer
 
 
 def initialize_config(sequence_size,
@@ -55,8 +57,8 @@ def initialize_hidden_layer(config):
 
     hidden_layer = {
         'W': W,
-        'h_bias': h_bias,
-        'h_states': h_states
+        'bias': h_bias,
+        'states': h_states
     }
 
     return hidden_layer, config
@@ -72,9 +74,9 @@ def initialize_output_layer(config):
     o_states = jnp.zeros(shape=(sequence_size, vocab_size)) 
 
     output_layer = {
-        'V': V,
-        'o_bias': o_bias,
-        'o_states': o_states,
+        'W': V,
+        'bias': o_bias,
+        'states': o_states,
     }
 
     return output_layer, config
@@ -88,7 +90,7 @@ def initialize_input_layer(config, inputs):
 
     input_layer = {
         'inputs': inputs,
-        'U': U
+        'W': U
     }
 
     return input_layer, config
@@ -136,11 +138,11 @@ def feed_forward(model: PyTree) -> tuple[jnp.ndarray, jnp.ndarray]:
 
             #We only need to pull the previous hidden state
             h_state, _ = carry
-            U = model['input_layer']['U']
+            U = model['input_layer']['W']
             W = model['hidden_layer']['W']
-            h_bias = model['hidden_layer']['h_bias']
-            V = model['output_layer']['V']
-            o_bias = model['output_layer']['o_bias']
+            h_bias = model['hidden_layer']['bias']
+            V = model['output_layer']['W']
+            o_bias = model['output_layer']['bias']
 
             #Calculated new hidden state
             weighted_input = jnp.dot(U, input)
@@ -157,7 +159,7 @@ def feed_forward(model: PyTree) -> tuple[jnp.ndarray, jnp.ndarray]:
             return new_carry, new_carry
 
       #Initial hidden state and output state for carry
-      carry_init = (model['hidden_layer']['h_states'][0], model['output_layer']['o_states'][0])
+      carry_init = (model['hidden_layer']['states'][0], model['output_layer']['states'][0])
 
       #Use lax.scan() to loop through all inputs
       _, all_states = lax.scan(feed_forward_step, carry_init, model['input_layer']['inputs'])
@@ -205,10 +207,10 @@ def compute_rnn_loss(model: PyTree, expected: jnp.ndarray) -> tuple[float, PyTre
     all_states = feed_forward(model)
 
     #Update model PyTree with final states
-    model['hidden_layer']['h_states'], model['output_layer']['o_states'] = all_states
+    model['hidden_layer']['states'], model['output_layer']['states'] = all_states
 
     #Compute loss
-    loss = loss_fn(model['output_layer']['o_states'], expected)
+    loss = loss_fn(model['output_layer']['states'], expected)
 
     return loss, model
 
@@ -299,12 +301,21 @@ def to_python_types(leaf):
     list - jax array converted to list, or original leaf
     """
 
-    if isinstance(leaf, (jax.dtypes.prng_key, PRNGKeyArray)):
-        return jax.random.key_data(leaf).tolist()
-    elif isinstance(leaf, (jax.Array, jnp.ndarray)):
-        # Convert to a standard Python scalar or list
+    def true_fun_keys(leaf):
+        leaf = jax.random.key_data(leaf)
+    
+    def false_fun_keys(leaf):
+        pass
+
+    lax.cond(isinstance(leaf, PRNGKeyArray), true_fun_keys, false_fun_keys, leaf)
+
+    def true_fun_jax(leaf):
         return leaf.tolist()
-    return leaf
+    
+    def false_fun_jax(leaf):
+        return leaf
+    
+    lax.cond(isinstance(leaf, (jax.Array, jnp.ndarray)), true_fun_jax, false_fun_jax, leaf)
 
 
 
@@ -319,24 +330,36 @@ if __name__ == "__main__":
 
 
     #Construct initial model pytree
-    config = initialize_config(sequence_size=jnp.size(inputs, 1), vocab_size=jnp.size(inputs, 2))
-    print(config['key'].dtype)
-    model = construct_model_pytree(config, inputs=inputs[0])
+    #config = initialize_config(sequence_size=jnp.size(inputs, 1), vocab_size=jnp.size(inputs, 2)
+    #model = construct_model_pytree(config, inputs=inputs[0])
 
-    trained_model, final_idx = learning_loop(model, inputs, expected)
+    model = ModelParams(inputs=inputs[0], sequence_size=jnp.size(inputs, 1), vocab_size=jnp.size(inputs, 2))
+    model_tree = model.get_pytree()
 
-    trained_model['config']['key'] = jax.random.key_data(trained_model['config']['key']).tolist()
+    #print(model.hidden_layer.states)
+    #print(model_tree['hidden_layer']['states'])
 
-    trained_model_dict = jtu.tree_map(to_python_types, trained_model)
+
+    trained_model, final_idx = learning_loop(model_tree, inputs, expected)
+
+    #trained_model['config']['key'] = jax.random.key_data(trained_model['config']['key']).tolist()
+
+    #trained_model_dict = jtu.tree_map(to_python_types, trained_model)
+
+    model.update_params(trained_model)
+    trained_model_dict = model.get_pytree(python_type=True)
 
     with open('data.yml', "w", encoding="utf-8") as outfile:
         yaml.dump(trained_model_dict, outfile, default_flow_style=False)
 
-    decoded_output = decode_one_hot(trained_model['output_layer']['o_states'], chars_rev)
+    decoded_output = decode_one_hot(trained_model['output_layer']['states'], chars_rev)
     decoded_expected = decode_one_hot(expected[final_idx], chars_rev)
+
+
 
     print(f'decoded output: {decoded_output}')
     print(f'expected output: {decoded_expected}')
+    print(len(decoded_output), len(decoded_expected))
 
     #print(trained_model_dict)
 
