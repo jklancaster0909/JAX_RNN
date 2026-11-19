@@ -21,7 +21,7 @@ class ModelParams:
                  expected,
                  seed=1701, 
                  hidden_size=128,
-                 alpha=0.01):
+                 alpha=0.0001):
         
         self.inputs = inputs
         self.expected = expected
