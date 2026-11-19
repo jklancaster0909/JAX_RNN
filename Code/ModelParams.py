@@ -8,6 +8,7 @@ from jaxtyping import PyTree, PRNGKeyArray
 
 import numpy as np
 import yaml
+import time
 
 from RNN_Layers import HiddenLayer, OutputLayer, InputLayer
 from JAX_RNN import *

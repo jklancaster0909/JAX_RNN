@@ -133,6 +133,7 @@ def feed_forward(model: PyTree) -> tuple[jnp.ndarray, jnp.ndarray]:
       """
 
       #Feed forward implementation for a single input
+      @jax.jit
       def feed_forward_step(carry, input):
 
             #We only need to pull the previous hidden state

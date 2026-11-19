@@ -26,7 +26,8 @@ def load_text(file_name: string, seq_size: int = 30):
     with open(file_name, "r", encoding="utf-8") as file:
 
         seq = file.read(seq_size+1)
-        while len(seq) == seq_size+1:
+        #while len(seq) == seq_size+1:
+        for i in range(10000):
             raw_text.append(seq)
             seq = file.read(seq_size+1)
 
