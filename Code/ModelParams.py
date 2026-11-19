@@ -28,25 +28,58 @@ class ModelParams:
         self.vocab_size=jnp.size(self.inputs, 2)
         self.seed = seed
         self.key_root = jax.random.key(self.seed)
+        self.key = self.key_root
         self.hidden_size = hidden_size
         self.alpha = alpha
 
-        self.hidden_layer = HiddenLayer(self.key_root, 
+        self.partition_dataset()
+
+        self.hidden_layer = HiddenLayer(self.key, 
                                         self.hidden_size, 
                                         self.sequence_size)
         
+        #Initialize with training expected
         self.output_layer = OutputLayer(self.hidden_layer.key, 
                                         self.vocab_size, 
                                         self.hidden_size, 
                                         self.sequence_size, 
-                                        self.expected)
+                                        self.training_expected)
         
+        #Initialize with training inputs
         self.input_layer = InputLayer(self.output_layer.key, 
                                       self.hidden_size, 
                                       self.vocab_size, 
-                                      self.inputs)
+                                      self.training_inputs)
         
         self.key = self.input_layer.key
+
+    def partition_dataset(self):
+
+        print('Partitioning dataset...')
+
+        #Shuffle dataset
+        self.key, subkey = jax.random.split(self.key)
+        length = jnp.size(self.inputs, 0)
+        idxs = jax.random.permutation(subkey, length).astype(jnp.int32)
+        shuffled_inputs = self.inputs[idxs]
+        shuffled_expected = self.expected[idxs]
+
+        #Get dataset sizes
+        #TODO: make this more flexible
+        train_size = jnp.ceil(length*0.7).astype(jnp.int32)
+        valid_size = jnp.ceil((length-train_size)/2).astype(jnp.int32)
+
+        #Create, training, validation, and test datasets
+        self.training_inputs = shuffled_inputs[:train_size]
+        self.training_expected = shuffled_expected[:train_size]
+        self.valid_inputs = shuffled_inputs[train_size:train_size+valid_size]
+        self.valid_expected = shuffled_expected[train_size:train_size+valid_size]
+        self.test_inputs = shuffled_inputs[train_size+valid_size:]
+        self.test_expected = shuffled_expected[train_size+valid_size:]
+
+        print('Dataset partitioned\n')
+
+
         
 
 
@@ -115,27 +148,36 @@ class ModelParams:
                 return param_leaf - self.alpha * grad_leaf
             else:
                 return param_leaf
-            
-        num_iter = 50 #len(inputs)
+        
+        num_epochs = 1
+        batch_size = len(self.input_layer.inputs)
+        print(f'Batch size: {batch_size}\n')
         params = self.get_params()
+        for epoch in range(num_epochs):
             
-        for i in range(num_iter):
+            self.key, subkey = jax.random.split(self.key)
+            length = jnp.size(self.input_layer.inputs, 0)
+            idxs = jax.random.permutation(subkey, length).astype(jnp.int32)
+            self.input_layer.inputs = self.input_layer.inputs[idxs]
+            self.output_layer.expected = self.output_layer.expected[idxs]
+            
+            for i in range(batch_size):
 
-            #update inputs
-            params['input_layer']['inputs'] = self.inputs[i]
-            params['output_layer']['expected'] = self.expected[i]
+                #update inputs
+                params['input_layer']['inputs'] = self.input_layer.inputs[i]
+                params['output_layer']['expected'] = self.output_layer.expected[i]
 
-            #Define value and gradient function
-            loss_grad_fn = jax.jit(jax.value_and_grad(compute_rnn_loss, has_aux=True))
+                #Define value and gradient function
+                loss_grad_fn = jax.jit(jax.value_and_grad(compute_rnn_loss, has_aux=True))
 
-            #Run forward pass and compute gradients
-            loss_and_params, gradients = loss_grad_fn(params)
-            loss, params = loss_and_params
+                #Run forward pass and compute gradients
+                loss_and_params, gradients = loss_grad_fn(params)
+                loss, params = loss_and_params
 
-            params = jtu.tree_map(apply_gradient_step, params, gradients)
+                params = jtu.tree_map(apply_gradient_step, params, gradients)
 
-            if i % 10 == 0:
-                print(f'Loss at iter {i}: {loss}')
+                if i % 1000 == 0:
+                    print(f'Loss at iter {i}: {loss}')
 
         return params, i
 

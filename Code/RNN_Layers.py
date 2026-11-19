@@ -87,7 +87,7 @@ class OutputLayer(StateLayer):
 
     def __init__(self, key, vocab_size: int, hidden_size: int, sequence_size: int, expected: jnp.ndarray):
         super().__init__(key, (vocab_size, hidden_size), sequence_size)
-        self.expected = expected[0]
+        self.expected = expected
 
     def get_pytree(self, python_type: bool = False):
         tree = super().get_pytree(python_type=python_type)
@@ -113,7 +113,7 @@ class InputLayer(Layer):
     def __init__(self, key, hidden_size: int, vocab_size: int, inputs: jnp.ndarray):
         key_new, key_W = jax.random.split(key, 2)
         super().__init__(key_new, key_W, (hidden_size, vocab_size))
-        self.inputs = inputs[0]
+        self.inputs = inputs
 
     def get_pytree(self, python_type: bool = False):
         tree = super().get_pytree(python_type=python_type)

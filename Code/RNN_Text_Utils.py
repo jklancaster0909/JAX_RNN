@@ -25,13 +25,13 @@ def load_text(file_name: string, seq_size: int = 30):
     raw_text = []
     with open(file_name, "r", encoding="utf-8") as file:
 
-        #TODO: Better define number of sequences
-        for i in range(100):
-            raw_text.append(file.read(seq_size))
+        seq = file.read(seq_size+1)
+        while len(seq) == seq_size+1:
+            raw_text.append(seq)
+            seq = file.read(seq_size+1)
 
-    print('text loaded\n')
-
-    print(raw_text)
+    print('text loaded')
+    print(f'{len(raw_text)} sequences\n')
     
     return raw_text
 
@@ -239,7 +239,7 @@ def load_data(file_name: string = None, seq_size: int = 30):
     if file_name == None:
         return get_default_data()
 
-    raw_text = load_text(file_name, seq_size)[:100]
+    raw_text = load_text(file_name, seq_size)
 
     #max = get_max_line(raw_text)
     chars_dict, chars_rev = process_text(raw_text, max)
